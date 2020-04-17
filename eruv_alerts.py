@@ -204,6 +204,7 @@ for city in all_cities:
                 if arguments.delayed:
                     sleep(randint(0,2))
 
+                # Keep track of total # of users:
                 population += 1
         user_index += 1
     print('\n' + str(population) + ' users ' + ('would have been ' if arguments.test else '') + 'notified in ' + city + '.\n')
