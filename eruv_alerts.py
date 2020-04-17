@@ -37,7 +37,7 @@ def extract_values(obj, key):
 def shorten_message(message):
     """This function recursively tries to shorten a message
     to under 160 characters"""
-    if len(message) =< 160:
+    if len(message) <= 160:
         return message
     else:
         if '50 min' in message:
