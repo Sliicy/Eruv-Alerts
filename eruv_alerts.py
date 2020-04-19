@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# PYTHON_ARGCOMPLETE_OK
 
 # This script collects candle-lighting times from hebcal.com, weather reports from openweathermap.org, and sends an SMS to every subscriber from the Eruv Alerts Google Spreadsheet, based on the city.
 
@@ -7,7 +8,7 @@
 from twilio.rest import Client
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import urllib.request, json, argparse
+import urllib.request, json, argparse, argcomplete
 
 # Add random time delay to prevent being flagged:
 from random import randint
@@ -52,13 +53,24 @@ greetings = ['a great', 'a wonderful', 'an amazing', 'a good']
 
 # Initialize argument interpretation:
 parser = argparse.ArgumentParser(description='This script sends SMS messages via Twilio to subscribers on a Google Sheet.')
+parser.add_argument('--available-cities', help='Get a list of all available cities.', action='store_true')
 parser.add_argument('--delayed', help='Slowly send out each SMS between 0 - 2 seconds.', action='store_true')
 parser.add_argument('--donate', help='Append reminder to donate for select cities.', action='store_true')
+parser.add_argument('--ignore', nargs='+', help='Append a list of cities (space delimited) to skip alerting (cities with 2+ names should be enclosed in quotes). Available cities can be found using the --available-cities flag.')
 parser.add_argument('--no-candlelighting', help='Skip appending candle-lighting times.', action='store_true')
 parser.add_argument('--no-havdalah', help='Skip appending havdalah times.', action='store_true')
 parser.add_argument('--test', help='Test run without actually sending.', action='store_true')
-parser.add_argument('-v', '--verbose', help='Helpful for debugging.', action='store_true')
+parser.add_argument('-v', '--verbose', help='Verbose output. Useful for debugging.', action='store_true')
+argcomplete.autocomplete(parser)
 arguments = parser.parse_args()
+
+# Display test mode warning:
+if arguments.test:
+    print('Test mode is on. Nothing will actually be sent.\n')
+
+# Display ignored cities:
+if arguments.ignore and arguments.verbose:
+    print('Cities that will be skipped: ' + str([x.title() for x in arguments.ignore]) + '\n')
 
 # Google Authentication from external JSON file:
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -66,7 +78,6 @@ creds = ServiceAccountCredentials.from_json_keyfile_name('keys/google_auth.json'
 gclient = gspread.authorize(creds)
 if arguments.verbose:
     print('Google Authenticated successfully.\n')
-
 
 # Twilio Authentication from external JSON file:
 with open('keys/twilio_auth.json') as file:
@@ -79,14 +90,12 @@ if arguments.verbose:
 with open('keys/open_weather_map.json') as file:
     open_weather_map = json.load(file)
 
-
 # Load lists from sheets:
 subscriber_sheet = gclient.open('Eruv List').worksheet('Subscribers')
 rabbi_sheet = gclient.open('Eruv List').worksheet('Rabbis')
 status_sheet = gclient.open('Eruv List').worksheet('Status')
 if arguments.verbose:
     print('Google Sheets loaded successfully.\n')
-
 
 # Create arrays of all elements from the sheets. Skip top row (Timestamp, Phone Number, City, Rabbi's City, Zip Code):
 all_numbers = subscriber_sheet.col_values(2)[1:]
@@ -98,14 +107,28 @@ city_statuses = status_sheet.col_values(2)
 if arguments.verbose:
     print('Cities loaded successfully.\n')
 
+# Display a list of cities to user if requested:
+if arguments.available_cities:
+    print(all_cities)
+    quit()
+
 # For each city in Status Sheet:
 city_index = 0
+
 for city in all_cities:
 
     # Skip if the city status is Pending:
     if city_statuses[city_index] == 'Pending':
         city_index += 1
         continue
+
+    # Skip if city is being ignored (case insensitive):
+    if arguments.ignore:
+        if city.lower() in [x.lower() for x in arguments.ignore]:
+            if arguments.verbose:
+                print('Skipping ' + str(city) + '!\n')
+            city_index += 1
+            continue
 
     # Get zipcode of city:
     zip_index = 0

@@ -14,3 +14,8 @@ These can be installed with pip:
 ```bash
 pip3 install gspread twilio oauth2client
 ```
+
+Finally, make the script executable:
+```bash
+chmod +x ./eruv_alerts.py
+```
