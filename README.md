@@ -12,7 +12,7 @@ https://gspread.readthedocs.io/en/latest/
 
 These can be installed with pip:
 ```bash
-pip3 install gspread twilio oauth2client
+pip3 install -r requirements.txt
 ```
 
 Finally, make the script executable:
