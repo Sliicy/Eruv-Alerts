@@ -56,9 +56,11 @@ parser = argparse.ArgumentParser(description='This script sends SMS messages via
 parser.add_argument('--available-cities', help='Get a list of all available cities.', action='store_true')
 parser.add_argument('--delayed', help='Slowly send out each SMS between 0 - 2 seconds.', action='store_true')
 parser.add_argument('--donate', help='Append reminder to donate for select cities.', action='store_true')
-parser.add_argument('--ignore', nargs='+', help='Append a list of cities (space delimited) to skip alerting (cities with 2+ names should be enclosed in quotes). Available cities can be found using the --available-cities flag.')
+parser.add_argument('--blacklist', nargs='+', help='Append a list of cities (space delimited) to skip alerting (cities with 2+ names should be enclosed in quotes). Available cities can be found using the --available-cities flag. This argument will override the whitelist argument.')
 parser.add_argument('--no-candlelighting', help='Skip appending candle-lighting times.', action='store_true')
 parser.add_argument('--no-havdalah', help='Skip appending havdalah times.', action='store_true')
+parser.add_argument('--no-weather', help='Skip checking for weather updates. May be dangerous if there is major weather to report.', action='store_true')
+parser.add_argument('--whitelist', nargs='+', help='Append a list of cities (space delimited) to only alert (cities with 2+ names should be enclosed in quotes). All other cities will be skipped. Available cities can be found using the --available-cities flag. The blacklist argument will override this.')
 parser.add_argument('--test', help='Test run without actually sending.', action='store_true')
 parser.add_argument('-v', '--verbose', help='Verbose output. Useful for debugging.', action='store_true')
 argcomplete.autocomplete(parser)
@@ -69,8 +71,15 @@ if arguments.test:
     print('Test mode is on. Nothing will actually be sent.\n')
 
 # Display ignored cities:
-if arguments.ignore and arguments.verbose:
-    print('Cities that will be skipped: ' + str([x.title() for x in arguments.ignore]) + '\n')
+if arguments.blacklist and arguments.verbose and not arguments.whitelist:
+    print('Cities that will be skipped: ' + str([x.title() for x in arguments.blacklist]) + '\n')
+
+# Display whitelisted cities:
+if arguments.whitelist and arguments.verbose:
+    if arguments.blacklist:
+        print('Only these cities will be notified: ' + str(list(set([x.title() for x in arguments.whitelist]) - set([x.title() for x in arguments.blacklist]))) + '\n')
+    else:
+        print('Only these cities will be notified: ' + str([x.title() for x in arguments.whitelist]) + '\n')
 
 # Google Authentication from external JSON file:
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -117,18 +126,25 @@ city_index = 0
 
 for city in all_cities:
 
-    # Skip if the city status is Pending:
-    if city_statuses[city_index] == 'Pending':
-        city_index += 1
-        continue
-
     # Skip if city is being ignored (case insensitive):
-    if arguments.ignore:
-        if city.lower() in [x.lower() for x in arguments.ignore]:
-            if arguments.verbose:
-                print('Skipping ' + str(city) + '!\n')
+    if arguments.blacklist:
+        if city.lower() in [x.lower() for x in arguments.blacklist]:
+            print('\nSkipping ' + str(city) + " because it's blacklisted!\n")
             city_index += 1
             continue
+
+    # Skip if whitelist enabled and city isn't whitelisted (case insensitive):
+    if arguments.whitelist:
+        if not city.lower() in [x.lower() for x in arguments.whitelist]:
+            print('\nSkipping ' + str(city) + " because it isn't whitelisted!\n")
+            city_index += 1
+            continue
+
+    # Skip if the city status is Pending:
+    if city_statuses[city_index] == 'Pending':
+        print('\nSkipping ' + str(city) + " because it's still pending!\n")
+        city_index += 1
+        continue
 
     # Get zipcode of city:
     zip_index = 0
@@ -177,9 +193,18 @@ for city in all_cities:
         holiday = ' and Yom Tov'
 
     # If there's a thunderstorm or tornado, warn users to be vigilant:
-    weather_response = json.loads(urllib.request.urlopen('https://api.openweathermap.org/data/2.5/weather?zip=' + str(zipcode) + ',us&appid=' + open_weather_map['api-key'], timeout=15).read().decode('utf-8'))
-    temperature = 'Temperature: ' + str(int(1.8 * (weather_response['main']['temp'] - 273.15) + 32)) + 'F'
-    humidity = str(weather_response['main']['humidity']) + '% humid'
+    weather_response = ''
+    temperature = ''
+    humidity = ''
+    if arguments.no_weather:
+        print('No weather is being reported!\n')
+    else:
+        weather_response = json.loads(urllib.request.urlopen('https://api.openweathermap.org/data/2.5/weather?zip=' + str(zipcode) + ',us&appid=' + open_weather_map['api-key'], timeout=15).read().decode('utf-8'))
+        temperature = 'Temperature: ' + str(int(1.8 * (weather_response['main']['temp'] - 273.15) + 32)) + 'F'
+        humidity = str(weather_response['main']['humidity']) + '% humid'
+    if arguments.verbose and not arguments.no_weather:
+        print('Reported temperature for ' + city + ': ' + temperature + '\n')
+        print('Reported humidity for ' + city + ': ' + humidity + '\n')
 
     # Prequel & sequel change if there's a storm:
     prequel = ' The '
@@ -230,5 +255,5 @@ for city in all_cities:
                 # Keep track of total # of users:
                 population += 1
         user_index += 1
-    print('\n' + str(population) + ' users ' + ('would have been ' if arguments.test else '') + 'notified in ' + city + '.\n')
+    print('\n' + str(population) + ' users ' + ('would have been ' if arguments.test else '') + 'notified that ' + city + ' is ' + city_statuses[city_index] + '.\n')
     city_index += 1
