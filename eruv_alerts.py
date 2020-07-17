@@ -59,6 +59,26 @@ def shorten_message(message):
                 message)
             quit()
 
+def army_to_meridian(input_time):
+    if 'am' in input_time.lower() or 'pm' in input_time.lower():
+        return input_time
+
+    # Count occurrence of colons (to detect seconds):
+    colon_count = input_time.count(':')
+    time_split = input_time.split(':')
+    hours = int(time_split[0])
+    minutes = int(time_split[1])
+    seconds = 0
+    if colon_count == 2:
+        seconds = int(time_split[2])
+    meridian = ' AM'
+    if (hours >= 12):
+        meridian = ' PM'
+        hours -= 12
+    if hours == 0:
+        hours = 12
+    return str(hours) + ':' + str(minutes).zfill(2) + (':' + str(seconds).zfill(2) if seconds != 0 else '') + meridian
+
 
 # Define a list of random greetings to reduce spam detection and add variety:
 greetings = ['a great', 'a wonderful', 'an amazing', 'a good']
@@ -229,6 +249,9 @@ for city in all_cities:
             response,
             'title') if 'Candle' in i][0]
 
+    # Detects and converts army times to Meridian:
+    candle_lighting = candle_lighting.rsplit(' ', 1)[0] + ' ' + army_to_meridian(candle_lighting.rsplit(' ', 1)[1])
+
     # Find first occurrence of Havdalah from JSON only if Havdalah exists:
     havdalah = ''
 
@@ -238,6 +261,10 @@ for city in all_cities:
             i for i in extract_values(
                 response,
                 'title') if 'Havdalah' in i][0]
+
+        # Detects and converts army times to Meridian:
+        havdalah = havdalah.rsplit(' ', 1)[0] + ' ' + army_to_meridian(havdalah.rsplit(' ', 1)[1])
+
         havdalah = havdalah + '. '
     if len(havdalah) == 0:
         print('No Havdalah time detected!')
@@ -281,12 +308,14 @@ for city in all_cities:
         print('Reported temperature for ' + city + ': ' + temperature + '\n')
         print('Reported humidity for ' + city + ': ' + humidity + '\n')
 
-    # Prequel & sequel change if there's a storm:
+    # Prequel & sequel will change if a storm is detected:
     prequel = ' The '
     sequel = ''
 
-    if [i for i in extract_values(
-            weather_response, 'description') if 'thunderstorm' in i or 'tornado' in i]:
+    if [i for i in extract_values(weather_response, 'description') if 'thunderstorm' in i or 'tornado' in i]:
+        print('Weather will be reported!\n')
+        print('Reported temperature for ' + city + ': ' + temperature + '\n')
+        print('Reported humidity for ' + city + ': ' + humidity + '\n')
         prequel = ' As of now, the '
         sequel = 'If winds exceed 35 mph, consider the Eruv down. '
 
