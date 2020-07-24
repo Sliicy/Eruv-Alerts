@@ -48,7 +48,7 @@ def shorten_message(message):
     if len(message) <= 160:
         return message
     else:
-        if '50 min' in message:
+        if ' (50 min)' in message:
             return shorten_message(message.replace(' (50 min)', ''))
         else:
             # Warn if message still exceeds 160 characters:
@@ -57,7 +57,7 @@ def shorten_message(message):
                 city +
                 ' exceeds 160 character limit!\nMessage: ' +
                 message)
-            quit()
+            return message
 
 def army_to_meridian(input_time):
     if 'am' in input_time.lower() or 'pm' in input_time.lower():
@@ -88,45 +88,49 @@ parser = argparse.ArgumentParser(
     description='This script sends SMS messages via Twilio to subscribers on a Google Sheet.')
 parser.add_argument(
     '--available-cities',
-    help='Get a list of all available cities.',
-    action='store_true')
+    action='store_true',
+    help='Return a list of all available cities.')
+parser.add_argument(
+    '--custom-message',
+    action='append',
+    help='Broadcast a custom message (ie: service announcements). This will override and disable candle-lighting, Havdalah, and weather reports. Donate argument can still be used.')
 parser.add_argument(
     '--delayed',
-    help='Slowly send out each SMS between 0 - 2 seconds.',
-    action='store_true')
+    action='store_true',
+    help='Slowly send out each SMS between 0 - 2 seconds (randomized).')
 parser.add_argument(
     '--donate',
-    help='Append reminder to donate for select cities.',
-    action='store_true')
+    action='store_true',
+    help='Append reminder to donate for select cities.')
 parser.add_argument(
     '--blacklist',
     nargs='+',
     help='Append a list of cities (space delimited) to skip alerting (cities with 2+ names should be enclosed in quotes). Available cities can be found using the --available-cities flag. This argument will override the whitelist argument.')
 parser.add_argument(
     '--no-candlelighting',
-    help='Skip appending candle-lighting times.',
-    action='store_true')
+    action='store_true',
+    help='Skip appending candle-lighting times.')
 parser.add_argument(
     '--no-havdalah',
-    help='Skip appending havdalah times.',
-    action='store_true')
+    action='store_true',
+    help='Skip appending havdalah times.')
 parser.add_argument(
     '--no-weather',
-    help='Skip checking for weather updates. May be dangerous if there is major weather to report.',
-    action='store_true')
+    action='store_true',
+    help='Skip checking for weather updates. May be dangerous if there is major weather to report.')
 parser.add_argument(
     '--whitelist',
     nargs='+',
     help='Append a list of cities (space delimited) to only alert (cities with 2+ names should be enclosed in quotes). All other cities will be skipped. Available cities can be found using the --available-cities flag. The blacklist argument will override this.')
 parser.add_argument(
     '--test',
-    help='Test run without actually sending.',
-    action='store_true')
+    action='store_true',
+    help='Test run without actually sending.')
 parser.add_argument(
     '-v',
     '--verbose',
-    help='Verbose output. Useful for debugging.',
-    action='store_true')
+    action='store_true',
+    help='Verbose output. Useful for debugging.')
 argcomplete.autocomplete(parser)
 arguments = parser.parse_args()
 
@@ -149,6 +153,10 @@ if arguments.whitelist and arguments.verbose:
     else:
         print('Only these cities will be notified: ' +
               str([x.title() for x in arguments.whitelist]) + '\n')
+
+# Display custom message:
+if arguments.custom_message and arguments.verbose:
+    print('A custom message will be sent out instead!\n')
 
 # Google Authentication from external JSON file:
 scope = ['https://spreadsheets.google.com/feeds',
@@ -188,7 +196,7 @@ city_statuses = status_sheet.col_values(2)
 if arguments.verbose:
     print('Cities loaded successfully.\n')
 
-# Display a list of cities to user if requested:
+# Display a list of cities to user and exit if requested:
 if arguments.available_cities:
     print(all_cities)
     quit()
@@ -238,19 +246,28 @@ for city in all_cities:
     # Get Candle-lighting, Havdalah, and Parsha/Chag from hebcal.com:
     hebcal_URL = 'https://www.hebcal.com/shabbat/?cfg=json&zip=' + \
         str(zipcode) + '&m=50&a=on'
-    response = json.loads(
-        urllib.request.urlopen(
-            hebcal_URL,
-            timeout=15).read().decode('utf-8'))
+    response = ''
+
+    # Skip checking times if requested:
+    if (arguments.no_candlelighting and arguments.no_havdalah) or arguments.custom_message:
+        print('\nSkipping candlelighting and Havdalah times!\n')
+    else:
+        response = json.loads(
+            urllib.request.urlopen(
+                hebcal_URL,
+                timeout=15).read().decode('utf-8'))
 
     # Find first occurrence of Candle-lighting from JSON:
-    candle_lighting = [
-        i for i in extract_values(
-            response,
-            'title') if 'Candle' in i][0]
+    candle_lighting = ''
+    if response != '':
+        candle_lighting = [
+            i for i in extract_values(
+                response,
+                'title') if 'Candle' in i][0]
 
     # Detects and converts army times to Meridian:
-    candle_lighting = candle_lighting.rsplit(' ', 1)[0] + ' ' + army_to_meridian(candle_lighting.rsplit(' ', 1)[1])
+    if candle_lighting != '':
+        candle_lighting = candle_lighting.rsplit(' ', 1)[0] + ' ' + army_to_meridian(candle_lighting.rsplit(' ', 1)[1])
 
     # Find first occurrence of Havdalah from JSON only if Havdalah exists:
     havdalah = ''
@@ -266,8 +283,6 @@ for city in all_cities:
         havdalah = havdalah.rsplit(' ', 1)[0] + ' ' + army_to_meridian(havdalah.rsplit(' ', 1)[1])
 
         havdalah = havdalah + '. '
-    if len(havdalah) == 0:
-        print('No Havdalah time detected!')
 
     # Store if holiday:
     holiday = ''
@@ -291,8 +306,8 @@ for city in all_cities:
     weather_response = ''
     temperature = ''
     humidity = ''
-    if arguments.no_weather:
-        print('No weather is being reported!\n')
+    if arguments.no_weather or arguments.custom_message:
+        print('\nNo weather is being reported!\n')
     else:
         weather_response = json.loads(
             urllib.request.urlopen(
@@ -304,7 +319,7 @@ for city in all_cities:
         temperature = 'Temperature: ' + \
             str(int(1.8 * (weather_response['main']['temp'] - 273.15) + 32)) + 'F'
         humidity = str(weather_response['main']['humidity']) + '% humid'
-    if arguments.verbose and not arguments.no_weather:
+    if arguments.verbose and not arguments.no_weather and not arguments.custom_message:
         print('Reported temperature for ' + city + ': ' + temperature + '\n')
         print('Reported humidity for ' + city + ': ' + humidity + '\n')
 
@@ -326,18 +341,16 @@ for city in all_cities:
         for city_item in [x.strip() for x in city_found.split(',')]:
             if city == city_item:
 
-                if arguments.no_candlelighting:
-                    candle_lighting = ''
-
-                if arguments.no_havdalah:
-                    havdalah = ''
-
                 # Final message:
                 message = parsha + prequel + city + ' Eruv is ' + city_statuses[city_index] + '. ' + sequel + candle_lighting + '. ' + havdalah + (
                     'Have ' + random.choice(greetings) + ' Shabbos' + holiday + '!' if sequel == '' else '.')
 
                 # Try to shorten the message if necessary:
                 message = shorten_message(message)
+
+                # Override message with custom message if requested:
+                if arguments.custom_message:
+                    message = ''.join(str(elem) for elem in arguments.custom_message)
 
                 # Add optional parameters to select cities: (links may be
                 # flagged as spam)
@@ -365,13 +378,22 @@ for city in all_cities:
                 # Keep track of total # of users:
                 population += 1
         user_index += 1
-    print('\n' +
-          str(population) +
-          ' users ' +
-          ('would have been ' if arguments.test else '') +
-          'notified that ' +
-          city +
-          ' is ' +
-          city_statuses[city_index] +
-          '.\n')
+    if arguments.custom_message:
+        print('\n' +
+            str(population) +
+            ' users ' +
+            ('would have been ' if arguments.test else '') +
+            'notified: ' +
+            message +
+            '.\n')
+    else:
+        print('\n' +
+            str(population) +
+            ' users ' +
+            ('would have been ' if arguments.test else '') +
+            'notified that ' +
+            city +
+            ' is ' +
+            city_statuses[city_index] +
+            '.\n')
     city_index += 1
