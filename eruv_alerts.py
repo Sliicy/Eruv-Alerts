@@ -87,13 +87,17 @@ greetings = ['a great', 'a wonderful', 'an amazing', 'a good']
 parser = argparse.ArgumentParser(
     description='This script sends SMS messages via Twilio to subscribers on a Google Sheet.')
 parser.add_argument(
+    '--append',
+    action='append',
+    help='Append a custom message to the end of the generated message (it is appended after the donate argument if both are requested).')
+parser.add_argument(
     '--available-cities',
     action='store_true',
     help='Return a list of all available cities.')
 parser.add_argument(
     '--custom-message',
     action='append',
-    help='Broadcast a custom message (ie: service announcements). This will override and disable candle-lighting, Havdalah, and weather reports. Donate argument can still be used.')
+    help='Broadcast a custom message (ie: service announcements). This will override and disable candle-lighting, Havdalah, and weather reports (even forced). Donate and append argument can still be used.')
 parser.add_argument(
     '--delayed',
     action='store_true',
@@ -101,11 +105,15 @@ parser.add_argument(
 parser.add_argument(
     '--donate',
     action='store_true',
-    help='Append reminder to donate for select cities.')
+    help='Append a reminder to donate for select cities.')
 parser.add_argument(
     '--blacklist',
     nargs='+',
     help='Append a list of cities (space delimited) to skip alerting (cities with 2+ names should be enclosed in quotes). Available cities can be found using the --available-cities flag. This argument will override the whitelist argument.')
+parser.add_argument(
+    '--whitelist',
+    nargs='+',
+    help='Append a list of cities (space delimited) to only alert (cities with 2+ names should be enclosed in quotes). All other cities will be skipped. Available cities can be found using the --available-cities flag. The blacklist argument will override this.')
 parser.add_argument(
     '--no-candlelighting',
     action='store_true',
@@ -117,11 +125,11 @@ parser.add_argument(
 parser.add_argument(
     '--no-weather',
     action='store_true',
-    help='Skip checking for weather updates. May be dangerous if there is major weather to report.')
+    help='Skip checking for and reporting any weather updates. This will override the force-weather argument.')
 parser.add_argument(
-    '--whitelist',
-    nargs='+',
-    help='Append a list of cities (space delimited) to only alert (cities with 2+ names should be enclosed in quotes). All other cities will be skipped. Available cities can be found using the --available-cities flag. The blacklist argument will override this.')
+    '--weather',
+    action='store_true',
+    help='Adds the weather to be reported and warn recipients.')
 parser.add_argument(
     '--test',
     action='store_true',
@@ -156,7 +164,14 @@ if arguments.whitelist and arguments.verbose:
 
 # Display custom message:
 if arguments.custom_message and arguments.verbose:
-    print('A custom message will be sent out instead!\n')
+    if arguments.append:
+        print('A custom & appended message will be sent out instead!\n')
+    else:
+        print('A custom message will be sent out instead!\n')
+
+# Display appended message:
+if arguments.append and arguments.verbose and not arguments.custom_message:
+    print('An appended message will be sent out along with the regular message!\n')
 
 # Google Authentication from external JSON file:
 scope = ['https://spreadsheets.google.com/feeds',
@@ -268,12 +283,17 @@ for city in all_cities:
     # Detects and converts army times to Meridian:
     if candle_lighting != '':
         candle_lighting = candle_lighting.rsplit(' ', 1)[0] + ' ' + army_to_meridian(candle_lighting.rsplit(' ', 1)[1])
+        candle_lighting += '. '
+
+    # Skip candlelighting if requested:
+        if arguments.no_candlelighting:
+            candle_lighting = ''
 
     # Find first occurrence of Havdalah from JSON only if Havdalah exists:
     havdalah = ''
 
     # Verify there's a Havdalah entry first:
-    if len([i for i in extract_values(response, 'title') if 'Havdalah' in i]) > 0:
+    if not arguments.no_havdalah and len([i for i in extract_values(response, 'title') if 'Havdalah' in i]) > 0:
         havdalah = [
             i for i in extract_values(
                 response,
@@ -327,12 +347,12 @@ for city in all_cities:
     prequel = ' The '
     sequel = ''
 
-    if [i for i in extract_values(weather_response, 'description') if 'thunderstorm' in i or 'tornado' in i]:
+    if [i for i in extract_values(weather_response, 'description') if 'thunderstorm' in i or 'tornado' in i] or arguments.weather and not arguments.no_weather:
         print('Weather will be reported!\n')
         print('Reported temperature for ' + city + ': ' + temperature + '\n')
         print('Reported humidity for ' + city + ': ' + humidity + '\n')
         prequel = ' As of now, the '
-        sequel = 'If winds exceed 35 mph, consider the Eruv down. '
+        sequel = '. If winds exceed 35 mph, consider the Eruv down'
 
     # Loop through all users from city and send:
     user_index = 0
@@ -342,20 +362,23 @@ for city in all_cities:
             if city == city_item:
 
                 # Final message:
-                message = parsha + prequel + city + ' Eruv is ' + city_statuses[city_index] + '. ' + sequel + candle_lighting + '. ' + havdalah + (
-                    'Have ' + random.choice(greetings) + ' Shabbos' + holiday + '!' if sequel == '' else '.')
+                message = parsha + prequel + city + ' Eruv is ' + city_statuses[city_index] + sequel + '. ' + candle_lighting + havdalah + (
+                    'Have ' + random.choice(greetings) + ' Shabbos' + holiday + '!' if sequel == '' else '')
 
-                # Try to shorten the message if necessary:
-                message = shorten_message(message)
+                # Try to shorten the message & remove whitespace if necessary:
+                message = shorten_message(message).strip()
 
                 # Override message with custom message if requested:
                 if arguments.custom_message:
                     message = ''.join(str(elem) for elem in arguments.custom_message)
 
-                # Add optional parameters to select cities: (links may be
-                # flagged as spam)
-                if arguments.donate and city == 'North Miami Beach':
+                # Append donate message if requested (links may be flagged as spam):
+                if arguments.donate:
                     message = message + ' Please visit bit.ly/nmberuv to cover the costs.'
+
+                # Add appended message if requested:
+                if arguments.append:
+                    message = message + ' ' + ''.join(str(elem) for elem in arguments.append).strip()
 
                 # Sanitize the phone number from special characters:
                 clean_number = '+1' + str(
