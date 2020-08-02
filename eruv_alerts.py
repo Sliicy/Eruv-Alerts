@@ -12,13 +12,13 @@ from time import sleep
 import urllib.request
 import json
 import argparse
+import sys
 
 # 3rd party additional imports:
 import argcomplete
 from twilio.rest import Client
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-
 
 def extract_values(obj, key):
     """This function, being data-agnostic, extracts all key-values found in any multilevel JSON file, without knowing the order/hierarchy of the data.
@@ -72,7 +72,7 @@ def army_to_meridian(input_time):
     if colon_count == 2:
         seconds = int(time_split[2])
     meridian = ' AM'
-    if (hours >= 12):
+    if hours >= 12:
         meridian = ' PM'
         hours -= 12
     if hours == 0:
@@ -101,6 +101,7 @@ parser.add_argument(
 parser.add_argument(
     '--custom-message',
     action='append',
+    required='--phone' in sys.argv,
     help='Broadcast a custom message (ie: service announcements). This will override and disable candle-lighting, Havdalah, and weather reports (even forced). Donate and append argument can still be used.')
 parser.add_argument(
     '--delayed',
@@ -122,6 +123,10 @@ parser.add_argument(
     '--no-weather',
     action='store_true',
     help='Skip checking for and reporting any weather updates. This will override the force-weather argument.')
+parser.add_argument(
+    '--phone',
+    action='append',
+    help='Sends an SMS to a single phone number instead of a group. This argument requires a custom message as well.')
 parser.add_argument(
     '--test',
     action='store_true',
@@ -194,6 +199,29 @@ if arguments.verbose:
 # Load Open Weather Map Authentication from external JSON file:
 with open('keys/open_weather_map.json') as file:
     open_weather_map = json.load(file)
+
+# Send single SMS and exit:
+if arguments.phone:
+    message = ''.join(str(elem) for elem in arguments.custom_message)
+
+    # Append donate message if requested (links may be flagged as spam):
+    if arguments.donate:
+        message = message + ' Please visit bit.ly/nmberuv to cover the costs.'
+
+    # Add appended message if requested:
+    if arguments.append:
+        message = message + ' ' + ''.join(str(elem) for elem in arguments.append).strip()
+
+    # Sanitize the phone number from special characters:
+    clean_number = '+1' + str(
+        ''.join(str(elem) for elem in arguments.phone)).replace("-", "").replace(" ", "").replace("(", "").replace(")", "").replace(".", "").replace("_", "")
+    if arguments.test:
+        print('"' + message + '" would have been sent to: ' + clean_number)
+    else:
+        twilio_message = client.messages.create(
+            to=clean_number, from_=twilio_file['phone'], body=message)
+        print('"' + message + '" was sent to: ' + clean_number)
+    quit()
 
 # Load lists from sheets:
 subscriber_sheet = gclient.open('Eruv List').worksheet('Subscribers')
