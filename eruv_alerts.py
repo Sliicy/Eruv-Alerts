@@ -95,6 +95,10 @@ parser.add_argument(
     action='store_true',
     help='Return a list of all available cities.')
 parser.add_argument(
+    '--blacklist',
+    nargs='+',
+    help='Append a list of cities (space delimited) to skip alerting (cities with 2+ names should be enclosed in quotes). Available cities can be found using the --available-cities flag. This argument will override the whitelist argument.')
+parser.add_argument(
     '--custom-message',
     action='append',
     help='Broadcast a custom message (ie: service announcements). This will override and disable candle-lighting, Havdalah, and weather reports (even forced). Donate and append argument can still be used.')
@@ -106,14 +110,6 @@ parser.add_argument(
     '--donate',
     action='store_true',
     help='Append a reminder to donate for select cities.')
-parser.add_argument(
-    '--blacklist',
-    nargs='+',
-    help='Append a list of cities (space delimited) to skip alerting (cities with 2+ names should be enclosed in quotes). Available cities can be found using the --available-cities flag. This argument will override the whitelist argument.')
-parser.add_argument(
-    '--whitelist',
-    nargs='+',
-    help='Append a list of cities (space delimited) to only alert (cities with 2+ names should be enclosed in quotes). All other cities will be skipped. Available cities can be found using the --available-cities flag. The blacklist argument will override this.')
 parser.add_argument(
     '--no-candlelighting',
     action='store_true',
@@ -127,10 +123,6 @@ parser.add_argument(
     action='store_true',
     help='Skip checking for and reporting any weather updates. This will override the force-weather argument.')
 parser.add_argument(
-    '--weather',
-    action='store_true',
-    help='Adds the weather to be reported and warn recipients.')
-parser.add_argument(
     '--test',
     action='store_true',
     help='Test run without actually sending.')
@@ -139,6 +131,14 @@ parser.add_argument(
     '--verbose',
     action='store_true',
     help='Verbose output. Useful for debugging.')
+parser.add_argument(
+    '--weather',
+    action='store_true',
+    help='Adds the weather to be reported and warn recipients.')
+parser.add_argument(
+    '--whitelist',
+    nargs='+',
+    help='Append a list of cities (space delimited) to only alert (cities with 2+ names should be enclosed in quotes). All other cities will be skipped. Available cities can be found using the --available-cities flag. The blacklist argument will override this.')
 argcomplete.autocomplete(parser)
 arguments = parser.parse_args()
 
@@ -146,32 +146,34 @@ arguments = parser.parse_args()
 if arguments.test:
     print('Test mode is on. Nothing will actually be sent.\n')
 
-# Display ignored cities:
-if arguments.blacklist and arguments.verbose and not arguments.whitelist:
-    print('Cities that will be skipped: ' +
-          str([x.title() for x in arguments.blacklist]) + '\n')
+# Dispaly additional information if verbose requested:
+if arguments.verbose:
 
-# Display whitelisted cities:
-if arguments.whitelist and arguments.verbose:
-    if arguments.blacklist:
-        print('Only these cities will be notified: ' +
-              str(list(set([x.title() for x in arguments.whitelist]) -
-                       set([x.title() for x in arguments.blacklist]))) +
-              '\n')
-    else:
-        print('Only these cities will be notified: ' +
-              str([x.title() for x in arguments.whitelist]) + '\n')
+    # Display ignored cities:
+    if arguments.blacklist and not arguments.whitelist:
+        print('Cities that will be skipped: ' +
+              str([x.title() for x in arguments.blacklist]) + '\n')
 
-# Display custom message:
-if arguments.custom_message and arguments.verbose:
-    if arguments.append:
-        print('A custom & appended message will be sent out instead!\n')
-    else:
-        print('A custom message will be sent out instead!\n')
+    # Display whitelisted cities:
+    if arguments.whitelist:
+        if arguments.blacklist:
+            print('Only these cities will be notified: ' +
+                str(list(set([x.title() for x in arguments.whitelist]) -
+                set([x.title() for x in arguments.blacklist]))) + '\n')
+        else:
+              print('Only these cities will be notified: ' +
+                    str([x.title() for x in arguments.whitelist]) + '\n')
 
-# Display appended message:
-if arguments.append and arguments.verbose and not arguments.custom_message:
-    print('An appended message will be sent out along with the regular message!\n')
+    # Display custom message:
+    if arguments.custom_message:
+        if arguments.append:
+            print('A custom & appended message will be sent out instead!\n')
+        else:
+            print('A custom message will be sent out instead!\n')
+
+    # Display appended message:
+    if arguments.append and not arguments.custom_message:
+        print('An appended message will be sent out along with the regular message!\n')
 
 # Google Authentication from external JSON file:
 scope = ['https://spreadsheets.google.com/feeds',
@@ -401,14 +403,14 @@ for city in all_cities:
                 # Keep track of total # of users:
                 population += 1
         user_index += 1
+
     if arguments.custom_message:
         print('\n' +
             str(population) +
             ' users ' +
             ('would have been ' if arguments.test else '') +
             'notified: ' +
-            message +
-            '.\n')
+            message + '.\n')
     else:
         print('\n' +
             str(population) +
@@ -417,6 +419,5 @@ for city in all_cities:
             'notified that ' +
             city +
             ' is ' +
-            city_statuses[city_index] +
-            '.\n')
+            city_statuses[city_index] + '.\n')
     city_index += 1
