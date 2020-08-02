@@ -112,6 +112,10 @@ parser.add_argument(
     action='store_true',
     help='Append a reminder to donate for select cities.')
 parser.add_argument(
+    '--include-whatsapp',
+    action='store_true',
+    help='Send SMS messages to WhatsApp numbers as well. These numbers normally do not receive SMS alerts.')
+parser.add_argument(
     '--no-candlelighting',
     action='store_true',
     help='Skip appending candle-lighting times.')
@@ -234,6 +238,7 @@ if arguments.verbose:
 # Phone Number, City, Rabbi's City, Zip Code):
 all_numbers = subscriber_sheet.col_values(2)[1:]
 all_user_cities = subscriber_sheet.col_values(3)[1:]
+whatsapp_list = subscriber_sheet.col_values(4)[1:]
 all_rabbi_cities = rabbi_sheet.col_values(3)[1:]
 all_rabbi_zipcodes = rabbi_sheet.col_values(4)[1:]
 all_cities = status_sheet.col_values(1)
@@ -391,6 +396,13 @@ for city in all_cities:
         for city_item in [x.strip() for x in city_found.split(',')]:
             if city == city_item:
 
+                # Skip if WhatsApp user, unless requested:
+                if whatsapp_list[user_index].lower() == 'whatsapp':
+                    if arguments.include_whatsapp:
+                        print('\nSending SMS to a WhatsApp number!\n')
+                    else:
+                        continue
+
                 # Final message:
                 message = parsha + prequel + city + ' Eruv is ' + city_statuses[city_index] + sequel + '. ' + candle_lighting + havdalah + (
                     'Have ' + random.choice(greetings) + ' Shabbos' + holiday + '!' if sequel == '' else '')
@@ -430,22 +442,14 @@ for city in all_cities:
 
                 # Keep track of total # of users:
                 population += 1
+
+        # Keep track of current index of user:
         user_index += 1
 
-    if arguments.custom_message:
-        print('\n' +
-            str(population) +
-            ' users ' +
-            ('would have been ' if arguments.test else '') +
-            'notified: ' +
-            message + '.\n')
-    else:
-        print('\n' +
-            str(population) +
-            ' users ' +
-            ('would have been ' if arguments.test else '') +
-            'notified that ' +
-            city +
-            ' is ' +
-            city_statuses[city_index] + '.\n')
+    print('\n' +
+        str(population) +
+        ' users ' +
+        ('would have been ' if arguments.test else '') +
+        'notified' +
+        (': "' + message + '"' if arguments.custom_message else ' that ' + city + ' is ' + city_statuses[city_index] + '.') + '\n')
     city_index += 1
