@@ -128,6 +128,10 @@ parser.add_argument(
     action='store_true',
     help='Skip checking for and reporting any weather updates. This will override the force-weather argument.')
 parser.add_argument(
+    '--override-pending',
+    action='store_true',
+    help='Include cities that are Pending (they are normally skipped).')
+parser.add_argument(
     '--phone',
     action='append',
     help='Sends an SMS to a single phone number instead of a group. This argument requires a custom message as well.')
@@ -239,6 +243,9 @@ if arguments.verbose:
 all_numbers = subscriber_sheet.col_values(2)[1:]
 all_user_cities = subscriber_sheet.col_values(3)[1:]
 whatsapp_list = subscriber_sheet.col_values(4)[1:]
+# Catch in case there are no 'WhatsApp' entries (list must be same size as other list, not 0):
+if len(whatsapp_list) == 0:
+    whatsapp_list = [''] * len(subscriber_sheet.col_values(2)[1:])
 all_rabbi_cities = rabbi_sheet.col_values(3)[1:]
 all_rabbi_zipcodes = rabbi_sheet.col_values(4)[1:]
 all_cities = status_sheet.col_values(1)
@@ -273,8 +280,8 @@ for city in all_cities:
             city_index += 1
             continue
 
-    # Skip if the city status is Pending:
-    if city_statuses[city_index] == 'Pending':
+    # Skip if the city status is Pending unless requested otherwise:
+    if city_statuses[city_index] == 'Pending' and not arguments.override_pending:
         print('\nSkipping ' + str(city) + " because it's still pending!\n")
         city_index += 1
         continue
