@@ -364,6 +364,9 @@ for city in all_cities:
         parsha = 'Chag Somayach!'
         holiday = ' and Yom Tov'
 
+        # Skip Havdalah times if it's a holiday:
+        havdalah = ''
+
     # If there's a thunderstorm or tornado, warn users to be vigilant:
     weather_response = ''
     temperature = ''
