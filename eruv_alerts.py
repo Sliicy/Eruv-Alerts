@@ -112,9 +112,9 @@ parser.add_argument(
     action='store_true',
     help='Append a reminder to donate for select cities.')
 parser.add_argument(
-    '--include-whatsapp',
+    '--include-non-SMS',
     action='store_true',
-    help='Send SMS messages to WhatsApp numbers as well. These numbers normally do not receive SMS alerts.')
+    help='Send SMS messages to subscribers that didn\'t specify SMS. For example, Signal, WhatsApp, Telegram, etc.')
 parser.add_argument(
     '--no-candlelighting',
     action='store_true',
@@ -242,10 +242,10 @@ if arguments.verbose:
 # Phone Number, City, Rabbi's City, Zip Code):
 all_numbers = subscriber_sheet.col_values(2)[1:]
 all_user_cities = subscriber_sheet.col_values(3)[1:]
-whatsapp_list = subscriber_sheet.col_values(4)[1:]
-# Catch in case there are no 'WhatsApp' entries (list must be same size as other list, not 0):
-if len(whatsapp_list) == 0:
-    whatsapp_list = [''] * len(subscriber_sheet.col_values(2)[1:])
+non_sms_list = subscriber_sheet.col_values(4)[1:]
+# Catch in case there are no non SMS entries (list must be same size as other list, not 0):
+if len(non_sms_list) == 0:
+    non_sms_list = [''] * len(subscriber_sheet.col_values(2)[1:])
 all_rabbi_cities = rabbi_sheet.col_values(3)[1:]
 all_rabbi_zipcodes = rabbi_sheet.col_values(4)[1:]
 all_cities = status_sheet.col_values(1)
@@ -406,10 +406,10 @@ for city in all_cities:
         for city_item in [x.strip() for x in city_found.split(',')]:
             if city == city_item:
 
-                # Skip if WhatsApp user, unless requested:
-                if whatsapp_list[user_index].lower() == 'whatsapp':
-                    if arguments.include_whatsapp:
-                        print('\nSending SMS to a WhatsApp number!\n')
+                # Skip if user isn't subscribed via SMS, unless requested:
+                if non_sms_list[user_index].lower() != 'sms':
+                    if arguments.include_non_sms:
+                        print('\nSending SMS to a non SMS number!\n')
                     else:
                         continue
 
