@@ -112,7 +112,7 @@ parser.add_argument(
     action='store_true',
     help='Append a reminder to donate for select cities.')
 parser.add_argument(
-    '--include-non-SMS',
+    '--include-non-sms',
     action='store_true',
     help='Send SMS messages to subscribers that didn\'t specify SMS. For example, Signal, WhatsApp, Telegram, etc.')
 parser.add_argument(
