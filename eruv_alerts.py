@@ -409,7 +409,7 @@ for city in all_cities:
                 # Skip if user isn't subscribed via SMS, unless requested:
                 if non_sms_list[user_index].lower() != 'sms':
                     if arguments.include_non_sms:
-                        print('\nSending SMS to a non SMS number!\n')
+                        print('\nSending SMS to a non-SMS number!\n')
                     else:
                         continue
 
